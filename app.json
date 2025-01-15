@@ -4,11 +4,11 @@
     "slug": "MyApp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/2025_Transparant-19-modified.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/2025_Transparant-15.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },

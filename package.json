@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@expo/metro-runtime": "~4.0.0",
+    "@react-native-async-storage/async-storage": "1.23.1",
     "@react-navigation/native": "^7.0.14",
     "@react-navigation/stack": "^7.1.1",
     "axios": "^1.7.9",
@@ -20,6 +21,9 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-native": "0.76.6",
+    "react-native-fade": "^2.1.1",
+    "react-native-fade-in-view": "^1.1.0",
+    "react-native-fade-view": "^0.6.0",
     "react-native-gesture-handler": "^2.22.0",
     "react-native-reanimated": "^3.16.7",
     "react-native-safe-area-context": "^5.1.0",

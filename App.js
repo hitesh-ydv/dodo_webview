@@ -9,33 +9,67 @@ import {
   Alert,
   SafeAreaView,
   Image,
-  Linking
+  Linking,
+  ActivityIndicator
 } from 'react-native';
 import WebView from 'react-native-webview';
-import Icon from 'react-native-vector-icons/Ionicons'; // Import Ionicons
+import Icon from 'react-native-vector-icons/Ionicons';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'react-native';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import axios from 'axios'; // Make sure to import axios
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // Import AsyncStorage
+import FadeInView from 'react-native-fade-in-view';
 
-// Home Screen
 const HomeScreen = ({ navigation }) => {
-  const [isHeaderEnabled, setHeaderEnabled] = useState(false);
+  const [isHeaderEnabled, setHeaderEnabled] = useState(true);
   const [isAutoRotationEnabled, setAutoRotationEnabled] = useState(false);
   const [isHttpsRequired, setHttpsRequired] = useState(true);
-  const [baseUrl, setBaseUrl] = useState('https://iosmirror.cc/');
+  const [baseUrl, setBaseUrl] = useState('');
   const [urlParams, setUrlParams] = useState('');
-  const [theme, setTheme] = useState('light'); // Theme state
+  const [theme, setTheme] = useState('light');
+  const [isLoadingWebView, setLoadingWebView] = useState(false);
+  const [isLoadingSafari, setLoadingSafari] = useState(false);
+
+  const saveSettings = async () => {
+    try {
+      await AsyncStorage.setItem('userSettings', JSON.stringify({ baseUrl, urlParams }));
+      console.log('Settings saved:', { baseUrl, urlParams });
+    } catch (error) {
+      console.error('Error saving settings:', error);
+    }
+  };
+  const loadSettings = async () => {
+    try {
+      const savedSettings = await AsyncStorage.getItem('userSettings');
+      if (savedSettings) {
+        const { baseUrl: savedBaseUrl, urlParams: savedUrlParams } = JSON.parse(savedSettings);
+        setBaseUrl(savedBaseUrl || '');
+        setUrlParams(savedUrlParams || '');
+        console.log('Loaded settings:', { savedBaseUrl, savedUrlParams });
+      } else {
+        console.log('No saved settings found.');
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadSettings(); // Load settings when the component mounts
+  }, []);
+
+  useEffect(() => {
+    saveSettings(); // Save settings when baseUrl or urlParams change
+  }, [baseUrl, urlParams]);
 
   const handleOpenWebView = async () => {
+    setLoadingWebView(true);
     const fullUrl = `${baseUrl}${urlParams}`;
 
-    // Check if HTTPS is required
-    const isHttps = isHttpsRequired; // This should be a boolean value (true or false)
-
-    // Validate the URL format
-    if (isHttps && !fullUrl.startsWith('https://')) {
+    if (isHttpsRequired && !fullUrl.startsWith('https://')) {
+      setLoadingWebView(false);
       Alert.alert('Error', 'HTTPS is required for the URL.');
       return;
     }
@@ -43,8 +77,8 @@ const HomeScreen = ({ navigation }) => {
     try {
       const formData = new FormData();
       formData.append('url', baseUrl);
-      formData.append('https', isHttps ? 'true' : 'false');
-      formData.append('perameter', urlParams );
+      formData.append('https', isHttpsRequired ? 'true' : 'false');
+      formData.append('perameter', urlParams);
 
       const response = await axios.post(
         'https://mobiledetects.com/valid-url',
@@ -56,34 +90,40 @@ const HomeScreen = ({ navigation }) => {
         }
       );
 
-      const validUrl = response.data.valid_url; // Assuming the response contains a valid_url field
+      const validUrl = response.data.valid_url;
       if (validUrl) {
         navigation.navigate('WebView', {
-          url: validUrl+urlParams,
-          showHeader: isHeaderEnabled,
+          url: `${validUrl}${urlParams}`,
+          showHeader: !isHeaderEnabled,
           isAutoRotationEnabled: isAutoRotationEnabled,
         });
       } else {
         Alert.alert('Error', 'The URL is not valid.');
       }
     } catch (error) {
-      console.error('Error during API call:', error.response || error); // Log the error if the API call fails
+      console.error('Error during API call:', error.response || error);
       Alert.alert('Error', 'Failed to validate the URL.');
+    } finally {
+      setLoadingWebView(false);
     }
   };
 
 
-  const handleOpenInSafari = (baseUrl, urlParams) => {
+  const handleOpenInSafari = async () => {
+    setLoadingSafari(true);
     const fullUrl = `${baseUrl}${urlParams}`;
-    Linking.openURL(fullUrl).catch(err =>
-      Alert.alert('Error', 'Failed to open URL in Safari.')
-    );
+    try {
+      await Linking.openURL(fullUrl);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to open URL in Safari.');
+    } finally {
+      setLoadingSafari(false);
+    }
   };
 
   const toggleTheme = () => {
     setTheme(prevTheme => {
       const newTheme = prevTheme === 'light' ? 'dark' : 'light';
-      // Change the status bar style based on the new theme
       StatusBar.setBarStyle(newTheme === 'dark' ? 'light-content' : 'dark-content');
       return newTheme;
     });
@@ -103,101 +143,132 @@ const HomeScreen = ({ navigation }) => {
         style={styles.themeToggle}
         onPress={toggleTheme}
       >
-        <Icon
-          name={isDarkTheme ? 'sunny' : 'moon'}
-          size={24}
-          color={isDarkTheme ? '#ffcc00' : '#000'}
-        />
+        <FadeInView duration={350}>
+          <Icon
+            name={isDarkTheme ? 'sunny' : 'moon'}
+            size={24}
+            color={isDarkTheme ? '#ffcc00' : '#000'}
+          />
+        </FadeInView>
       </TouchableOpacity>
 
       {/* Dodo Logo Image */}
-      <Image
-        source={require('./assets/2025_Transparant-15.png')}
-        style={styles.logo}
-        resizeMode="contain"
-      />
-
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: isDarkTheme ? '#333' : '#fff',
-              color: isDarkTheme ? '#fff' : '#000',
-            },
-          ]}
-          value={baseUrl}
-          onChangeText={setBaseUrl}
-          placeholder="Enter Base URL"
-          placeholderTextColor={isDarkTheme ? '#aaa' : '#888'}
+      <FadeInView duration={350}>
+        <Image
+          source={require('./assets/2025_Transparant-15.png')}
+          style={styles.logo}
+          resizeMode="contain"
         />
-      </View>
+      </FadeInView>
 
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: isDarkTheme ? '#333' : '#fff',
-              color: isDarkTheme ? '#fff' : '#000',
-            },
-          ]}
-          value={urlParams}
-          onChangeText={setUrlParams}
-          placeholder="Enter URL Parameters"
-          placeholderTextColor={isDarkTheme ? '#aaa' : '#888'}
-        />
-      </View>
+      <FadeInView duration={350}>
 
-      <View style={styles.switchContainer}>
-        <View style={styles.switchRow}>
-          <Text style={{ color: isDarkTheme ? '#fff' : '#000' }}>
-            Show Header Bar
-          </Text>
-          <Switch
-            value={isHeaderEnabled}
-            onValueChange={setHeaderEnabled}
-            trackColor={{ true: '#F15A29', false: 'gray' }}
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: isDarkTheme ? '#202020' : '#fff',
+                color: isDarkTheme ? '#fff' : '#000',
+              },
+            ]}
+            value={baseUrl}
+            onChangeText={setBaseUrl}
+            placeholder="Enter Base URL"
+            placeholderTextColor={isDarkTheme ? '#aaa' : '#888'}
           />
         </View>
-        <View style={styles.switchRow}>
-          <Text style={{ color: isDarkTheme ? '#fff' : '#000' }}>
-            Auto Rotation
-          </Text>
-          <Switch
-            value={isAutoRotationEnabled}
-            onValueChange={setAutoRotationEnabled}
-            trackColor={{ true: '#F15A29', false: 'gray' }}
-          />
-        </View>
-        <View style={styles.switchRow}>
-          <Text style={{ color: isDarkTheme ? '#fff' : '#000' }}>
-            HTTPS Required
-          </Text>
-          <Switch
-            value={isHttpsRequired}
-            onValueChange={setHttpsRequired}
-            trackColor={{ true: '#F15A29', false: 'gray' }}
-          />
-        </View>
-      </View>
+      </FadeInView>
 
-      <TouchableOpacity style={styles.button} onPress={handleOpenWebView}>
-        <Text
-          style={[
-            styles.buttonText,
-            { color: isDarkTheme ? '#000' : '#000' },
-          ]}
+      <FadeInView duration={350}>
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: isDarkTheme ? '#202020' : '#fff',
+                color: isDarkTheme ? '#fff' : '#000',
+              },
+            ]}
+            value={urlParams}
+            onChangeText={setUrlParams}
+            placeholder="Enter URL Parameters"
+            placeholderTextColor={isDarkTheme ? '#aaa' : '#888'}
+          />
+        </View>
+      </FadeInView>
+
+      <FadeInView duration={350}>
+
+        <View style={styles.switchContainer}>
+          <View style={styles.switchRow}>
+            <Text style={{ color: isDarkTheme ? '#fff' : '#000' }}>
+              Full Screen
+            </Text>
+            <Switch
+              value={isHeaderEnabled}
+              onValueChange={setHeaderEnabled}
+              trackColor={{ true: '#F15A29', false: 'gray' }}
+            />
+          </View>
+          <View style={styles.switchRow}>
+            <Text style={{ color: isDarkTheme ? '#fff' : '#000' }}>
+              Auto Rotation
+            </Text>
+            <Switch
+              value={isAutoRotationEnabled}
+              onValueChange={setAutoRotationEnabled}
+              trackColor={{ true: '#F15A29', false: 'gray' }}
+            />
+          </View>
+          <View style={styles.switchRow}>
+            <Text style={{ color: isDarkTheme ? '#fff' : '#000' }}>
+              HTTPS Required
+            </Text>
+            <Switch
+              value={isHttpsRequired}
+              onValueChange={setHttpsRequired}
+              trackColor={{ true: '#F15A29', false: 'gray' }}
+            />
+          </View>
+        </View>
+      </FadeInView>
+
+
+      <FadeInView duration={350}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleOpenWebView}
+          disabled={isLoadingWebView}
         >
-          Open WebView
-        </Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() => handleOpenInSafari(baseUrl, urlParams)}
-      >
-        <Text style={styles.buttonText}>Open in Safari</Text>
-      </TouchableOpacity>
+          {isLoadingWebView ? (
+            <ActivityIndicator size="small" color="#000" />
+          ) : (
+            <Text
+              style={[
+                styles.buttonText,
+                { color: isDarkTheme ? '#000' : '#000' },
+              ]}
+            >
+              Open WebView
+            </Text>
+          )}
+        </TouchableOpacity>
+      </FadeInView>
+
+      <FadeInView duration={350}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleOpenInSafari}
+          disabled={isLoadingSafari}
+        >
+          {isLoadingSafari ? (
+            <ActivityIndicator size="small" color="#000" />
+          ) : (
+            <Text style={styles.buttonText}>Open in Safari</Text>
+          )}
+        </TouchableOpacity>
+      </FadeInView>
 
     </View>
   );
@@ -213,16 +284,15 @@ const WebViewScreen = ({ route }) => {
       StatusBar.setHidden(true);
     }
 
-    // Lock or unlock orientation based on auto-rotation setting
     if (isAutoRotationEnabled) {
-      ScreenOrientation.unlockAsync(); // Allow rotation
+      ScreenOrientation.unlockAsync();
     } else {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT); // Lock to portrait
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT);
     }
 
     return () => {
       StatusBar.setHidden(false);
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.DEFAULT); // Reset to default when leaving
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.DEFAULT);
     };
   }, [showHeader, isAutoRotationEnabled]);
 
@@ -236,7 +306,7 @@ const WebViewScreen = ({ route }) => {
       <WebView
         source={{ uri: url }}
         style={{ flex: 1 }}
-        originWhitelist={['*']} // Optional, allows all origins
+        originWhitelist={['*']}
       />
     </View>
   );
@@ -256,17 +326,13 @@ const App = () => {
         <Stack.Screen
           name="WebView"
           component={WebViewScreen}
-          options={{ headerShown: false }} // Hide React Navigation header
+          options={{ headerShown: false }}
         />
       </Stack.Navigator>
     </NavigationContainer>
   );
 };
 
-
-
-
-// Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -274,16 +340,11 @@ const styles = StyleSheet.create({
     paddingTop: 100,
   },
   header: {
-    height: 50, // You can adjust this height as needed
+    height: 50,
     backgroundColor: 'red',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 10, // Optional: Add some padding if needed
-  },
-  headerText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+    paddingTop: 10,
   },
   themeToggle: {
     position: 'absolute',

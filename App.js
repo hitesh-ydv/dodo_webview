@@ -67,19 +67,73 @@ const HomeScreen = ({ navigation }) => {
   const handleOpenWebView = async () => {
     setLoadingWebView(true);
     const fullUrl = `${baseUrl}${urlParams}`;
-
+  
     if (isHttpsRequired && !fullUrl.startsWith('https://')) {
       setLoadingWebView(false);
       Alert.alert('Error', 'HTTPS is required for the URL.');
       return;
     }
-
+  
+    // Check if Auto Rotation is enabled and show alert
+    if (isAutoRotationEnabled) {
+      Alert.alert(
+        'Orientation Lock Check',
+        'For Auto Rotation to work, please disable your device\'s orientation lock (via Control Center).', 
+        [
+          {
+            text: 'Cancel',
+            onPress: () => setLoadingWebView(false),
+            style: 'cancel',
+          },
+          {
+            text: 'Proceed Anyway',
+            onPress: async () => {
+              try {
+                const formData = new FormData();
+                formData.append('url', baseUrl);
+                formData.append('https', isHttpsRequired ? 'true' : 'false');
+                formData.append('perameter', urlParams);
+  
+                const response = await axios.post(
+                  'https://mobiledetects.com/valid-url',
+                  formData,
+                  {
+                    headers: {
+                      'Content-Type': 'multipart/form-data',
+                    },
+                  }
+                );
+  
+                const validUrl = response.data.valid_url;
+                if (validUrl) {
+                  navigation.navigate('WebView', {
+                    url: `${validUrl}${urlParams}`,
+                    showHeader: !isHeaderEnabled,
+                    isAutoRotationEnabled: isAutoRotationEnabled,
+                  });
+                } else {
+                  Alert.alert('Error', 'The URL is not valid.');
+                }
+              } catch (error) {
+                console.error('Error during API call:', error.response || error);
+                Alert.alert('Error', 'Failed to validate the URL.');
+              } finally {
+                setLoadingWebView(false);
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+  
+    // Proceed if Auto Rotation is disabled
     try {
       const formData = new FormData();
       formData.append('url', baseUrl);
       formData.append('https', isHttpsRequired ? 'true' : 'false');
       formData.append('perameter', urlParams);
-
+  
       const response = await axios.post(
         'https://mobiledetects.com/valid-url',
         formData,
@@ -89,7 +143,7 @@ const HomeScreen = ({ navigation }) => {
           },
         }
       );
-
+  
       const validUrl = response.data.valid_url;
       if (validUrl) {
         navigation.navigate('WebView', {
@@ -308,7 +362,7 @@ const WebViewScreen = ({ route }) => {
         style={{ flex: 1 }}
         originWhitelist={['*']}
       />
-    </View>
+    </View> 
   );
 };
 

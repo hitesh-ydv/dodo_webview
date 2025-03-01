@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, use } from 'react';
 import {
   StyleSheet,
   View,
@@ -10,7 +10,8 @@ import {
   SafeAreaView,
   Image,
   Linking,
-  ActivityIndicator
+  ActivityIndicator,
+  Platform // Import Platform
 } from 'react-native';
 import WebView from 'react-native-webview';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -40,6 +41,7 @@ const HomeScreen = ({ navigation }) => {
       console.error('Error saving settings:', error);
     }
   };
+
   const loadSettings = async () => {
     try {
       const savedSettings = await AsyncStorage.getItem('userSettings');
@@ -57,28 +59,26 @@ const HomeScreen = ({ navigation }) => {
   };
 
   useEffect(() => {
-    loadSettings(); // Load settings when the component mounts
-  }, []);
+    loadSettings(); // Load settings when the app starts
+  }
+    , []);
 
   useEffect(() => {
     saveSettings(); // Save settings when baseUrl or urlParams change
   }, [baseUrl, urlParams]);
 
+
   const handleOpenWebView = async () => {
     setLoadingWebView(true);
     const fullUrl = `${baseUrl}${urlParams}`;
-  
-    if (isHttpsRequired && !fullUrl.startsWith('https://')) {
-      setLoadingWebView(false);
-      Alert.alert('Error', 'HTTPS is required for the URL.');
-      return;
-    }
-  
+    console.log(fullUrl)
+
+
     // Check if Auto Rotation is enabled and show alert
     if (isAutoRotationEnabled) {
       Alert.alert(
         'Orientation Lock Check',
-        'For Auto Rotation to work, please disable your device\'s orientation lock (via Control Center).', 
+        'For Auto Rotation to work, please disable your device\'s orientation lock (via Control Center).',
         [
           {
             text: 'Cancel',
@@ -93,7 +93,7 @@ const HomeScreen = ({ navigation }) => {
                 formData.append('url', baseUrl);
                 formData.append('https', isHttpsRequired ? 'true' : 'false');
                 formData.append('perameter', urlParams);
-  
+
                 const response = await axios.post(
                   'https://mobiledetects.com/valid-url',
                   formData,
@@ -103,14 +103,29 @@ const HomeScreen = ({ navigation }) => {
                     },
                   }
                 );
-  
+
+                const httpCheck = response.data.https;
+
                 const validUrl = response.data.valid_url;
                 if (validUrl) {
-                  navigation.navigate('WebView', {
-                    url: `${validUrl}${urlParams}`,
-                    showHeader: !isHeaderEnabled,
-                    isAutoRotationEnabled: isAutoRotationEnabled,
-                  });
+                  if (isHttpsRequired && httpCheck) {
+                    console.log(httpCheck)
+                    navigation.navigate('WebView', {
+                      url: `${validUrl}${urlParams}`,
+                      showHeader: !isHeaderEnabled,
+                      isAutoRotationEnabled: isAutoRotationEnabled,
+                    });
+                  } else if (!isHttpsRequired && httpCheck) {
+                    navigation.navigate('WebView', {
+                      url: `${validUrl}${urlParams}`,
+                      showHeader: !isHeaderEnabled,
+                      isAutoRotationEnabled: isAutoRotationEnabled,
+                    });
+                  } else if(isHttpsRequired && !httpCheck){
+                    Alert.alert('Error', 'The URL is not valid.');
+
+                  }
+
                 } else {
                   Alert.alert('Error', 'The URL is not valid.');
                 }
@@ -126,14 +141,14 @@ const HomeScreen = ({ navigation }) => {
       );
       return;
     }
-  
+
     // Proceed if Auto Rotation is disabled
     try {
       const formData = new FormData();
       formData.append('url', baseUrl);
       formData.append('https', isHttpsRequired ? 'true' : 'false');
       formData.append('perameter', urlParams);
-  
+
       const response = await axios.post(
         'https://mobiledetects.com/valid-url',
         formData,
@@ -143,7 +158,7 @@ const HomeScreen = ({ navigation }) => {
           },
         }
       );
-  
+
       const validUrl = response.data.valid_url;
       if (validUrl) {
         navigation.navigate('WebView', {
@@ -187,6 +202,7 @@ const HomeScreen = ({ navigation }) => {
 
   return (
     <View
+
       style={[
         styles.container,
         { backgroundColor: isDarkTheme ? '#121212' : '#fff' },
@@ -328,8 +344,9 @@ const HomeScreen = ({ navigation }) => {
   );
 };
 
-const WebViewScreen = ({ route }) => {
+const WebViewScreen = ({ route, navigation }) => {
   const { url, showHeader, isAutoRotationEnabled } = route.params;
+  const [isAdPage, setIsAdPage] = useState(false);
 
   useEffect(() => {
     if (showHeader) {
@@ -350,19 +367,43 @@ const WebViewScreen = ({ route }) => {
     };
   }, [showHeader, isAutoRotationEnabled]);
 
+  const handleNavigationStateChange = (navState) => {
+    // Check if the URL matches the specific ad link
+    if (navState.url.includes('https://userverify.netmirror.app')) {
+      // Open the URL externally (Safari/Chrome)
+      Linking.openURL(navState.url).catch((err) => console.error('Error opening URL:', err));
+
+      // Simulate waiting for 20 seconds after the ad is opened
+      setTimeout(() => {
+        // After 20 seconds, navigate back to the app
+        Alert.alert('Ad Complete', 'Returning to the home page now.');
+        navigation.goBack();  // You can use navigation.navigate('Home') to go directly to the home screen
+      }, 20000); // 20 seconds
+    }
+  };
+
+
   return (
     <View style={{ flex: 1 }}>
       {showHeader && (
         <SafeAreaView style={styles.header}>
-          <Text style={styles.headerText}>Dodo Webview</Text>
         </SafeAreaView>
       )}
       <WebView
         source={{ uri: url }}
         style={{ flex: 1 }}
         originWhitelist={['*']}
+        mediaPlaybackRequiresUserAction={false}  // Automatically play media
+        allowsInlineMediaPlayback={true}         // Allow inline playback for videos
+        javaScriptEnabled={true}                  // Enable JavaScript for interactive content
+        domStorageEnabled={true}                  // Enable DOM storage
+        prefersHomeIndicatorAutoHidden={true}     // Hide the home indicator
+        contentInsetAdjustmentBehavior="never"    // Prevent safe area adjustment
+        allowUniversalAccessFromFileURLs={true}   // Allow file URLs to access data
+        useWebKit={true}
+        onNavigationStateChange={handleNavigationStateChange}
       />
-    </View> 
+    </View>
   );
 };
 
@@ -407,6 +448,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
     padding: 10,
   },
+  
   logo: {
     width: 200,
     height: 150,
